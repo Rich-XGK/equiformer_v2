@@ -1,1 +1,6 @@
+<<<<<<< HEAD
 __pycache__
+=======
+# 忽略所有__pycache__文件夹
+__pycache__/
+>>>>>>> 5d1fadc87f3b9cc70290468ead03326ef513fc57
