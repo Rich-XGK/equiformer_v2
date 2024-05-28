@@ -154,61 +154,61 @@ class EquiformerV2_OC20(BaseModel):
     ):
         super().__init__()
 
-        self.use_pbc = use_pbc
-        self.regress_forces = regress_forces
-        self.otf_graph = otf_graph
-        self.max_neighbors = max_neighbors
-        self.max_radius = max_radius
-        self.cutoff = max_radius
-        self.max_num_elements = max_num_elements
+        self.use_pbc = use_pbc  # True
+        self.regress_forces = regress_forces    # True
+        self.otf_graph = otf_graph  # True
+        self.max_neighbors = max_neighbors  # 20
+        self.max_radius = max_radius    # 12.0
+        self.cutoff = max_radius    # 12.0
+        self.max_num_elements = max_num_elements    # 90
 
-        self.num_layers = num_layers
-        self.sphere_channels = sphere_channels
-        self.attn_hidden_channels = attn_hidden_channels
-        self.num_heads = num_heads
-        self.attn_alpha_channels = attn_alpha_channels
-        self.attn_value_channels = attn_value_channels
-        self.ffn_hidden_channels = ffn_hidden_channels
-        self.norm_type = norm_type
+        self.num_layers = num_layers    # 12
+        self.sphere_channels = sphere_channels  # 128
+        self.attn_hidden_channels = attn_hidden_channels    # 64
+        self.num_heads = num_heads  # 8
+        self.attn_alpha_channels = attn_alpha_channels  # 64
+        self.attn_value_channels = attn_value_channels  # 16
+        self.ffn_hidden_channels = ffn_hidden_channels  # 128
+        self.norm_type = norm_type  # layer_norm_sh
         
-        self.lmax_list = lmax_list
-        self.mmax_list = mmax_list
-        self.grid_resolution = grid_resolution
+        self.lmax_list = lmax_list  # [6]
+        self.mmax_list = mmax_list  # [2]
+        self.grid_resolution = grid_resolution  # 18
 
-        self.num_sphere_samples = num_sphere_samples
+        self.num_sphere_samples = num_sphere_samples    # 128
 
-        self.edge_channels = edge_channels
-        self.use_atom_edge_embedding = use_atom_edge_embedding 
-        self.share_atom_edge_embedding = share_atom_edge_embedding
-        if self.share_atom_edge_embedding:
+        self.edge_channels = edge_channels  # 128
+        self.use_atom_edge_embedding = use_atom_edge_embedding  # True
+        self.share_atom_edge_embedding = share_atom_edge_embedding  # False
+        if self.share_atom_edge_embedding:  # False
             assert self.use_atom_edge_embedding
             self.block_use_atom_edge_embedding = False
         else:
-            self.block_use_atom_edge_embedding = self.use_atom_edge_embedding
-        self.use_m_share_rad = use_m_share_rad
-        self.distance_function = distance_function
-        self.num_distance_basis = num_distance_basis
+            self.block_use_atom_edge_embedding = self.use_atom_edge_embedding   # True
+        self.use_m_share_rad = use_m_share_rad  # False
+        self.distance_function = distance_function  # gaussian
+        self.num_distance_basis = num_distance_basis    # 512
 
-        self.attn_activation = attn_activation
-        self.use_s2_act_attn = use_s2_act_attn
-        self.use_attn_renorm = use_attn_renorm
-        self.ffn_activation = ffn_activation
-        self.use_gate_act = use_gate_act
-        self.use_grid_mlp = use_grid_mlp
-        self.use_sep_s2_act = use_sep_s2_act
+        self.attn_activation = attn_activation  # silu
+        self.use_s2_act_attn = use_s2_act_attn  # False
+        self.use_attn_renorm = use_attn_renorm  # True
+        self.ffn_activation = ffn_activation    # silu
+        self.use_gate_act = use_gate_act    # False
+        self.use_grid_mlp = use_grid_mlp    # True
+        self.use_sep_s2_act = use_sep_s2_act    # True
         
-        self.alpha_drop = alpha_drop
-        self.drop_path_rate = drop_path_rate
-        self.proj_drop = proj_drop
+        self.alpha_drop = alpha_drop    # 0.1
+        self.drop_path_rate = drop_path_rate    # 0.05
+        self.proj_drop = proj_drop  # 0.0
 
-        self.weight_init = weight_init
+        self.weight_init = weight_init  # 'uniform'
         assert self.weight_init in ['normal', 'uniform']
 
         self.device = 'cpu' #torch.cuda.current_device()
 
         self.grad_forces = False
-        self.num_resolutions = len(self.lmax_list)
-        self.sphere_channels_all = self.num_resolutions * self.sphere_channels
+        self.num_resolutions = len(self.lmax_list)  # 1
+        self.sphere_channels_all = self.num_resolutions * self.sphere_channels  # 128
         
         # Weights for message initialization
         self.sphere_embedding = nn.Embedding(self.max_num_elements, self.sphere_channels_all)
@@ -229,7 +229,7 @@ class EquiformerV2_OC20(BaseModel):
             raise ValueError
         
         # Initialize the sizes of radial functions (input channels and 2 hidden channels)
-        self.edge_channels_list = [int(self.distance_expansion.num_output)] + [self.edge_channels] * 2
+        self.edge_channels_list = [int(self.distance_expansion.num_output)] + [self.edge_channels] * 2  # [600, 128, 128]
 
         # Initialize atom edge embedding
         if self.share_atom_edge_embedding and self.use_atom_edge_embedding:
@@ -241,7 +241,7 @@ class EquiformerV2_OC20(BaseModel):
         
         # Initialize the module that compute WignerD matrices and other values for spherical harmonic calculations
         self.SO3_rotation = nn.ModuleList()
-        for i in range(self.num_resolutions):
+        for i in range(self.num_resolutions):   # 1
             self.SO3_rotation.append(SO3_Rotation(self.lmax_list[i]))
 
         # Initialize conversion between degree l and order m layouts
@@ -264,48 +264,48 @@ class EquiformerV2_OC20(BaseModel):
 
         # Edge-degree embedding
         self.edge_degree_embedding = EdgeDegreeEmbedding(
-            self.sphere_channels,
-            self.lmax_list,
-            self.mmax_list,
-            self.SO3_rotation,
-            self.mappingReduced,
-            self.max_num_elements,
-            self.edge_channels_list,
-            self.block_use_atom_edge_embedding,
-            rescale_factor=_AVG_DEGREE
+            self.sphere_channels,   # 128
+            self.lmax_list, # [6]
+            self.mmax_list, # [2]
+            self.SO3_rotation,  # SO3_Rotation
+            self.mappingReduced,    # CoefficientMappingModule
+            self.max_num_elements,  # 90
+            self.edge_channels_list,    # [600, 128, 128]
+            self.block_use_atom_edge_embedding, # True
+            rescale_factor=_AVG_DEGREE  # 23.395238876342773
         )
 
         # Initialize the blocks for each layer of EquiformerV2
         self.blocks = nn.ModuleList()
         for i in range(self.num_layers):
             block = TransBlockV2(
-                self.sphere_channels,
-                self.attn_hidden_channels,
-                self.num_heads,
-                self.attn_alpha_channels,
-                self.attn_value_channels,
-                self.ffn_hidden_channels,
-                self.sphere_channels, 
-                self.lmax_list,
-                self.mmax_list,
-                self.SO3_rotation,
-                self.mappingReduced,
-                self.SO3_grid,
-                self.max_num_elements,
-                self.edge_channels_list,
-                self.block_use_atom_edge_embedding,
-                self.use_m_share_rad,
-                self.attn_activation,
-                self.use_s2_act_attn,
-                self.use_attn_renorm,
-                self.ffn_activation,
-                self.use_gate_act,
-                self.use_grid_mlp,
-                self.use_sep_s2_act,
-                self.norm_type,
-                self.alpha_drop, 
-                self.drop_path_rate,
-                self.proj_drop
+                self.sphere_channels,   # 128
+                self.attn_hidden_channels,  # 128
+                self.num_heads, # 8
+                self.attn_alpha_channels,   # 64
+                self.attn_value_channels,   # 16
+                self.ffn_hidden_channels,   # 128
+                self.sphere_channels,   # 128
+                self.lmax_list, # [6]
+                self.mmax_list, # [2]
+                self.SO3_rotation,  # SO3_Rotation
+                self.mappingReduced,    # CoefficientMappingModule
+                self.SO3_grid,  # ModuleListInfo
+                self.max_num_elements,  # 90
+                self.edge_channels_list,    # [600, 128, 128]
+                self.block_use_atom_edge_embedding, # True
+                self.use_m_share_rad,   # False
+                self.attn_activation,   # silu
+                self.use_s2_act_attn,   # False
+                self.use_attn_renorm,   # True
+                self.ffn_activation,    # silu
+                self.use_gate_act,  # False
+                self.use_grid_mlp,  # True
+                self.use_sep_s2_act,    # True
+                self.norm_type, # layer_norm_sh
+                self.alpha_drop,    # 0.1
+                self.drop_path_rate,    # 0.05
+                self.proj_drop  # 0.0
             )
             self.blocks.append(block)
 
@@ -313,16 +313,16 @@ class EquiformerV2_OC20(BaseModel):
         # Output blocks for energy and forces
         self.norm = get_normalization_layer(self.norm_type, lmax=max(self.lmax_list), num_channels=self.sphere_channels)
         self.energy_block = FeedForwardNetwork(
-            self.sphere_channels,
-            self.ffn_hidden_channels, 
-            1,
-            self.lmax_list,
-            self.mmax_list,
-            self.SO3_grid,  
-            self.ffn_activation,
-            self.use_gate_act,
-            self.use_grid_mlp,
-            self.use_sep_s2_act
+            sphere_channels=self.sphere_channels,   # 128
+            hidden_channels=self.ffn_hidden_channels,   # 128
+            output_channels=1,  # 1
+            lmax_list=self.lmax_list,   # [6]
+            mmax_list=self.mmax_list,   # [2]
+            SO3_grid=self.SO3_grid,     # ModuleListInfo, (6, 6)
+            activation=self.ffn_activation, # silu
+            use_gate_act=self.use_gate_act, # False
+            use_grid_mlp=self.use_grid_mlp, # True
+            use_sep_s2_act=self.use_sep_s2_act  # True
         )
         if self.regress_forces:
             self.force_block = SO2EquivariantGraphAttention(
@@ -355,18 +355,18 @@ class EquiformerV2_OC20(BaseModel):
 
     @conditional_grad(torch.enable_grad())
     def forward(self, data):
-        self.batch_size = len(data.natoms)
+        self.batch_size = len(data.natoms)  # data.natoms = [77, ...]
         self.dtype = data.pos.dtype
         self.device = data.pos.device
 
-        atomic_numbers = data.atomic_numbers.long()
-        num_atoms = len(atomic_numbers)
-        pos = data.pos
+        atomic_numbers = data.atomic_numbers.long() # (N, )
+        num_atoms = len(atomic_numbers) # N
+        pos = data.pos  # (N, 3)
 
         (
-            edge_index,
-            edge_distance,
-            edge_distance_vec,
+            edge_index, # (2, E)
+            edge_distance,  # (E, )
+            edge_distance_vec,  # (E, 3)
             cell_offsets,
             _,  # cell offset distances
             neighbors,
@@ -447,9 +447,9 @@ class EquiformerV2_OC20(BaseModel):
         ###############################################################
         # Energy estimation
         ###############################################################
-        node_energy = self.energy_block(x) 
-        node_energy = node_energy.embedding.narrow(1, 0, 1)
-        energy = torch.zeros(len(data.natoms), device=node_energy.device, dtype=node_energy.dtype)
+        node_energy = self.energy_block(x)  # SO3_Embedding, (N, 49, 1)
+        node_energy = node_energy.embedding.narrow(1, 0, 1) # (N, 1, 1)
+        energy = torch.zeros(len(data.natoms), device=node_energy.device, dtype=node_energy.dtype) # (N, )
         energy.index_add_(0, data.batch, node_energy.view(-1))
         energy = energy / _AVG_NUM_NODES
 
